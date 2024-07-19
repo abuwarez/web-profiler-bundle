@@ -194,6 +194,7 @@ class ProfilerController
             $start =
             $end =
             $limit =
+            $hattrname = $hattrval =
             $token = null;
         } else {
             $session = $request->getSession();
@@ -206,6 +207,8 @@ class ProfilerController
             $end = $request->query->get('end', $session->get('_profiler_search_end'));
             $limit = $request->query->get('limit', $session->get('_profiler_search_limit'));
             $token = $request->query->get('token', $session->get('_profiler_search_token'));
+            $hattrname = $request->query->get('hattrname', $session->get('_profiler_search_hattrname'));
+            $hattrval = $request->query->get('hattrval', $session->get('_profiler_search_hattrval'));
         }
 
         return new Response(
@@ -219,10 +222,30 @@ class ProfilerController
                 'end' => $end,
                 'limit' => $limit,
                 'request' => $request,
+                'hattrname' => $hattrname,
+                'hattrval' => $hattrval,
             ]),
             200,
             ['Content-Type' => 'text/html']
         );
+    }
+
+    public function filterTokensByHeaderAttr(string $hattrname, string $hattrval, array $tokens): array
+    {
+        $filteredTokens = [];
+
+        foreach($tokens as $t) 
+        {
+            $data = $this->profiler->loadProfile($t["token"]);
+            $headers = $data->getCollectors()["request"]->getRequestHeaders();
+
+            if ($headers->has($hattrname) && (string)$headers->get($hattrname) === (string)$hattrval)
+            {
+                $filteredTokens[] = $t;
+            }
+        }
+
+        return $filteredTokens;
     }
 
     /**
@@ -251,12 +274,20 @@ class ProfilerController
         $start = $request->query->get('start', null);
         $end = $request->query->get('end', null);
         $limit = $request->query->get('limit');
+        $hattrname = $request->query->get('hattrname');
+        $hattrval = $request->query->get('hattrval');
+
+        $tokens = $this->profiler->find($ip, $url, $limit, $method, $start, $end, $statusCode);
+
+        if (!empty($hattrname)) {
+            $tokens = $this->filterTokensByHeaderAttr($hattrname, $hattrval, $tokens);
+        }
 
         return new Response($this->twig->render('@WebProfiler/Profiler/results.html.twig', [
             'request' => $request,
             'token' => $token,
             'profile' => $profile,
-            'tokens' => $this->profiler->find($ip, $url, $limit, $method, $start, $end, $statusCode),
+            'tokens' => $tokens,
             'ip' => $ip,
             'method' => $method,
             'status_code' => $statusCode,
@@ -264,6 +295,8 @@ class ProfilerController
             'start' => $start,
             'end' => $end,
             'limit' => $limit,
+            'hattrval' => $hattrval,
+            'hattrname' => $hattrname,
             'panel' => null,
         ]), 200, ['Content-Type' => 'text/html']);
     }
@@ -287,6 +320,8 @@ class ProfilerController
         $end = $request->query->get('end', null);
         $limit = $request->query->get('limit');
         $token = $request->query->get('token');
+        $hattrname = $request->query->get('hattrname');
+        $hattrval = $request->query->get('hattrval');
 
         if ($request->hasSession()) {
             $session = $request->getSession();
@@ -299,6 +334,8 @@ class ProfilerController
             $session->set('_profiler_search_end', $end);
             $session->set('_profiler_search_limit', $limit);
             $session->set('_profiler_search_token', $token);
+            $session->set('_profiler_search_hattrname', $hattrname);
+            $session->set('_profiler_search_hattrval', $hattrval);
         }
 
         if (!empty($token)) {
@@ -316,6 +353,8 @@ class ProfilerController
             'start' => $start,
             'end' => $end,
             'limit' => $limit,
+            'hattrname' => $hattrname,
+            'hattrval' => $hattrval
         ]), 302, ['Content-Type' => 'text/html']);
     }
 
